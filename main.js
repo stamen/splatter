@@ -180,13 +180,13 @@ views.Paint = extend( views.Base, function( stage, w, h, timer ) {
   update: function( time ) {
     // dump old points
     var pt = this.pts[ 0 ];
-    while( pt !== undefined && (time - pt.time) > 0.1 ) {
+    while( pt !== undefined && (time - pt.time) > 0.2 ) {
       this.pts.shift();
       pt = this.pts[ 0 ];
     }
 
     // add points if the brush is still
-    if ( this.last && (time - this.last.time) > 0.05 ) {
+    if ( this.last && (time - this.last.time) > 0.075 ) {
       this.pts.push( new BrushPoint( this.last.v[0], this.last.v[1], time ) );
       this.wasStationary = true;
     }
@@ -203,7 +203,7 @@ views.Paint = extend( views.Base, function( stage, w, h, timer ) {
     }
     var velocity = vec2.length( avg );
 
-    if ( velocity > 1.0 && this.wasStationary ) {
+    if ( velocity > 5.0 && this.wasStationary ) {
       this.tintFilter.uniforms.uColor.value = hexToRGB( ColorPalette.rand() );
       this.wasStationary = false;
     }
@@ -212,7 +212,7 @@ views.Paint = extend( views.Base, function( stage, w, h, timer ) {
     if ( this.pts.length ) {
       var last = this.pts[ this.pts.length - 1 ].v;
 
-      var nDrops = Math.min( Math.floor( Math.random() * velocity * 0.5 + 100.0 ), 1000 );
+      var nDrops = Math.min( Math.floor( Math.random() * velocity * 0.5 + 75.0 ), 1000 );
 
       this.brushPoints.removeChildren();
       for ( var i = 0; i < nDrops; ++i ) {
@@ -221,7 +221,7 @@ views.Paint = extend( views.Base, function( stage, w, h, timer ) {
         var radius = Math.pow( Math.random(), 4 ) * // random factor, tends to be closer to 1
           Math.min(1.0 / scatterDistance, 1.0) * // the further the scatter, the smaller
           velocity * 0.50 + // when velocity is higher, make it bigger
-          (1.0 / Math.pow( velocity + 0.25, 1.25)) * 2.0; // and when velocity is very small, make it bigger for stationary brush
+          Math.max( (1.0 - Math.log( velocity ) / Math.log( 20.0 )) * 3.0, 0.0 ); // and when velocity is very small, make it bigger for stationary brush
 
         var xy = vec2.scale( vec2.create(), avg, scatterDistance );
         var rotation = mat2d.rotate( mat2d.create(), mat2d.create(), scatterSpread );
