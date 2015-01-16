@@ -142,6 +142,8 @@ views.Paint = extend( views.Base, function( stage, w, h, timer ) {
 
   this.mouseTrap.hitArea = new PIXI.Rectangle( 0, 0, w, h );
   this.mouseTrap.interactive = true;
+  // for some reason, touchstart is necessary to get touchmove
+  this.mouseTrap.touchstart = this.onTouchStart.bind( this );
   this.mouseTrap.mousemove = this.mouseTrap.touchmove = this.onMouseMove.bind( this );
   this.mouseTrap.mouseup = this.onMouseUp.bind( this );
 
@@ -268,6 +270,9 @@ views.Paint = extend( views.Base, function( stage, w, h, timer ) {
   },
 
   onMouseUp: function( ev ) {
+  },
+
+  onTouchStart: function( ev ) {
   }
 });
 
