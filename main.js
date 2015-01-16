@@ -257,6 +257,10 @@ views.Paint = extend( views.Base, function( stage, w, h, timer ) {
     }
   },
 
+  clear: function () {
+    this.tex_in.clear();
+  },
+
   onMouseMove: function( ev ) {
     var pt = ev.getLocalPosition( this.gfx );
     this.last = new BrushPoint( pt.x, pt.y, this.timer.getElapsedSeconds() );
@@ -287,7 +291,8 @@ var init = function( $container ) {
   return {
     stage: stage,
     renderer: renderer,
-    view: view
+    view: view,
+    clear: view.clear.bind( view )
   };
 
 
