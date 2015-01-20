@@ -134,8 +134,9 @@ var ColorPalette = [
   0xfa5619, 0x243470, 0xefc126, 0x0d070b, 0xfffffd
 ];
 ColorPalette.rand = function() { return this[ Math.floor( Math.random() * this.length ) ]; }
-views.Paint = extend( views.Base, function( stage, w, h, timer ) {
+views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
   this.timer = timer;
+  this.sensitivity = sensitivity;
 
   this.mouseTrap = new PIXI.DisplayObject();
   stage.addChild( this.mouseTrap );
@@ -200,7 +201,7 @@ views.Paint = extend( views.Base, function( stage, w, h, timer ) {
           next = this.pts[ i + 1 ];
 
       var delta = vec2.sub( vec2.create(), next.v, pt.v );
-      vec2.scale( delta, delta, 1.0 / this.pts.length );
+      vec2.scale( delta, delta, (1.0 / this.pts.length) * this.sensitivity );
       vec2.add( avg, avg, delta );
     }
     var velocity = vec2.length( avg );
@@ -289,7 +290,8 @@ var init = function( $container ) {
 
   var timer = new Timer( new Date().getTime() );
 
-  var view = new views.Paint( stage, w, h, timer );
+  var sensitivity = getUrlParameter( "sensitivity" ) || 1.0;
+  var view = new views.Paint( stage, w, h, timer, sensitivity );
 
   requestAnimFrame( animate );
 
