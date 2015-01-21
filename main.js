@@ -46,6 +46,18 @@ function hexToRGB( hexInt ) {
   return [ r / 255.0, g / 255.0, b / 255 ];
 }
 
+Math.mix = function( x, y, a ) {
+  return x * (1.0 - a) + y * a;
+}
+
+// from http://en.wikipedia.org/wiki/B%C3%A9zier_curve
+// B(t) = (1 - t)^2 * P0 + 2(1 - t)t * P1 + t^2 * P2, where t is between 0,1
+function quadraticCurve( start, end, control, t ) {
+  var x = (1.0 - t) * (1.0 - t) * start[0] + 2 * (1.0 - t) * t * control[0] + t * t * end[0];
+  var y = (1.0 - t) * (1.0 - t) * start[1] + 2 * (1.0 - t) * t * control[1] + t * t * end[1];
+  return vec2.fromValues( x, y );
+}
+
 var BrushPoint = function( x, y, time ) {
   this.v = vec2.fromValues( x, y );
   this.time = time;
@@ -150,7 +162,12 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
 
   this.pts = [];
 
-  this.gfx = new PIXI.Graphics();
+  this.gfx_debug = new PIXI.Graphics();
+  this.gfx_paint = new PIXI.Graphics();
+  this.brushPoints = new PIXI.DisplayObjectContainer();
+  this.tex_brushPoint = PIXI.Texture.fromImage( "radial-alpha-gradient.png" );
+  this.offscreenContainer = new PIXI.DisplayObjectContainer();
+
   var tex_bg = PIXI.Texture.fromImage( "canvas.png" );
   this.background = new PIXI.TilingSprite( tex_bg, w, h );
   // this.background.tileScale = new PIXI.Point( 1.0 / 2.0, 1.0 / 2.0 );
@@ -162,12 +179,10 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
 
   stage.addChild( this.background );
   stage.addChild( this.texSprite_out );
-  this.offscreenContainer = new PIXI.DisplayObjectContainer();
+  stage.addChild( this.gfx_debug );
   this.offscreenContainer.addChild( this.texSprite_in );
-  this.brushPoints = new PIXI.DisplayObjectContainer();
   this.offscreenContainer.addChild( this.brushPoints );
-  this.tex_brushPoint = PIXI.Texture.fromImage( "radial-alpha-gradient.png" );
-
+  this.offscreenContainer.addChild( this.gfx_paint );
 
   // Filters broken? https://github.com/GoodBoyDigital/pixi.js/issues/843
   // this.texSprite_out.filters = [ new MetaballFilter() ];
@@ -177,10 +192,12 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
 
   this.texDirty = false;
   this.wasStationary = false;
+  this.previous = undefined;
   this.tintFilter = new ColorChangeFilter();
-  this.tintFilter.uniforms.uColor.value = hexToRGB( ColorPalette.rand() );
+  this.setColor( ColorPalette.rand() );
 }, {
   update: function( time ) {
+    // Update points ----------------------------------------------------------
     // dump old points
     var pt = this.pts[ 0 ];
     while( pt !== undefined && (time - pt.time) > 0.2 ) {
@@ -194,59 +211,115 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
       this.wasStationary = true;
     }
 
+    if ( this.pts.length === 0 ) return;
+
+
+    var v_last = this.pts[ this.pts.length - 1 ].v,
+        v_first = this.pts[ 0 ].v;
+        v_prev = this.previous || this.pts[ Math.max( 0, this.pts.length - 2 ) ].v;
+    this.previous = v_last;
+
+
+    // Do calculations over points --------------------------------------------
+
     // find the average over the window
-    var avg = vec2.create();
+    // FIXME: maybe calculate this based on time to account for sampling rates?
+    var avgDiff = vec2.create();
     for ( var i = 0; i < (this.pts.length - 1); ++i ) {
       var pt = this.pts[ i ],
           next = this.pts[ i + 1 ];
 
-      var delta = vec2.sub( vec2.create(), next.v, pt.v );
-      vec2.scale( delta, delta, (1.0 / this.pts.length) * this.sensitivity );
-      vec2.add( avg, avg, delta );
+      vec2.add( avgDiff, avgDiff, vec2.sub( vec2.create(), next.v, pt.v ) );
     }
-    var velocity = vec2.length( avg );
+    var scale = 1.0 / this.pts.length * this.sensitivity;
+    vec2.scale( avgDiff, avgDiff, scale );
+    var velocity = vec2.length( avgDiff );
 
-    if ( velocity > 5.0 && this.wasStationary ) {
-      this.tintFilter.uniforms.uColor.value = hexToRGB( ColorPalette.rand() );
+
+    // Update color -----------------------------------------------------------
+    if ( velocity > 10.0 && this.wasStationary ) {
+      this.setColor( ColorPalette.rand() );
       this.wasStationary = false;
     }
 
 
-    if ( this.pts.length ) {
-      var last = this.pts[ this.pts.length - 1 ].v;
+    // Prep for drawing -------------------------------------------------------
+    this.brushPoints.removeChildren();
+    this.gfx_debug.clear();
+    this.gfx_paint.clear();
 
-      var nDrops = Math.min( Math.floor( Math.random() * velocity * 0.5 + 75.0 ), 1000 );
+    this.drawDebugCircle( v_first[0], v_first[1], 10, 0xFF0000 );
+    this.drawDebugCircle( v_last[0], v_last[1], 10, 0x00FF00 );
+    // this.drawDebugCircle( v_first[0] + avgDiff[0], v_first[1] + avgDiff[1], 10, 0x0000FF );
 
-      this.brushPoints.removeChildren();
-      for ( var i = 0; i < nDrops; ++i ) {
-        var scatterDistance = Math.pow( Math.random(), 4 ) * velocity * 0.05;
-        var scatterSpread = (Math.random() - 0.5) * TAU / 3.0;
-        var radius = Math.pow( Math.random(), 4 ) * // random factor, tends to be closer to 1
-          Math.min(1.0 / scatterDistance, 1.0) * // the further the scatter, the smaller
-          velocity * 0.50 + // when velocity is higher, make it bigger
-          Math.max( (1.0 - Math.log( velocity ) / Math.log( 20.0 )) * 3.0, 0.0 ); // and when velocity is very small, make it bigger for stationary brush
 
-        var xy = vec2.scale( vec2.create(), avg, scatterDistance );
-        var rotation = mat2d.rotate( mat2d.create(), mat2d.create(), scatterSpread );
-        vec2.transformMat2d( xy, xy, rotation );
-        vec2.add( xy, last, xy );
+    // Draw curve -------------------------------------------------------------
+    // var ctrl = vec2.add( vec2.create(), v_prev, avgDiff );
+    // this.gfx_paint.moveTo( v_prev[0], v_prev[1] );
+    // this.gfx_paint.lineStyle( 2, this.color, 1.0 );
+    // this.gfx_paint.quadraticCurveTo( ctrl[0], ctrl[1], v_last[0], v_last[1] );
+    var v_prevToLast = vec2.sub( vec2.create(), v_last, v_prev ),
+      v_mid = vec2.add( vec2.create(), v_prev, vec2.scale( vec2.create(), v_prevToLast, 0.5 ) ),
+      ctrl = vec2.add( vec2.create(), v_mid, vec2.scale( vec2.create(), avgDiff, Math.max( 0.0, 1.0 - Math.log( velocity ) ) ) ),
+      thickness = Math.max( 2.0, (velocity - 10.0) * 0.25 );//Math.max( 1.0, 10.0 - Math.log( velocity ) / Math.log( 2.0 ) );
 
-        var sprite = new PIXI.Sprite( this.tex_brushPoint );
-        sprite.shader = this.tintFilter;
-        sprite.anchor.x = 0.5;
-        sprite.anchor.y = 0.5;
-        sprite.position.x = xy[0];
-        sprite.position.y = xy[1];
-        sprite.scale = new PIXI.Point(
-          (radius * 2) / this.tex_brushPoint.width,
-          (radius * 2) / this.tex_brushPoint.height
-        );
-        this.brushPoints.addChild( sprite );
-      }
-
-      this.tex_out.render( this.offscreenContainer, undefined, true );
-      this.texDirty = true;
+    for ( var t = 0.0; t <= 1.0; t += (1.0 / vec2.length( v_prevToLast )) ) {
+      var xy = quadraticCurve( v_prev, v_last, ctrl, t );
+      this.drawPaintDrop( xy[0], xy[1], thickness );
     }
+
+
+
+    // Draw drops -------------------------------------------------------------
+    // var nDrops = Math.min( Math.floor( Math.random() * velocity * 0.5 + 75.0 ), 1000 );
+    var nDrops = Math.min( 1000, Math.floor( Math.random() * Math.max( 0.0, velocity - 20.0 ) * 5.0 ) );
+
+    for ( var i = 0; i < nDrops; ++i ) {
+      var scatterDistance = Math.mix( Math.random(),
+                                      Math.pow( Math.random(), 4 ) * velocity * 0.05,
+                                      Math.min( 1.0, velocity / 20.0 ) );
+      var scatterSpread = (Math.random() - 0.5) * TAU / 3.0;
+      var radius = Math.pow( Math.random(), 4 ) * // random factor, tends to be closer to 1
+        Math.min(1.0 / scatterDistance, 1.0) * // the further the scatter, the smaller
+        velocity * 0.50 + // when velocity is higher, make it bigger
+        Math.max( (1.0 - Math.log( velocity ) / Math.log( 20.0 )) * 3.0, 0.0 ); // and when velocity is very small, make it bigger for stationary brush
+
+      // var xy = quadraticCurve( vec2.create(), vec2.sub( vec2.create(), v_last, v_first ), avgDiff, Math.min( 1.0, scatterDistance ) );
+      var xy = vec2.scale( vec2.create(), avgDiff, scatterDistance );
+      var rotation = mat2d.rotate( mat2d.create(), mat2d.create(), scatterSpread );
+      vec2.transformMat2d( xy, xy, rotation );
+      vec2.add( xy, v_last, xy );
+
+      // this.drawDebugCircle( xy[0], xy[1], 7, 0xFFFFFF );
+      this.drawPaintDrop( xy[0], xy[1], radius );
+    }
+
+    this.tex_out.render( this.offscreenContainer, undefined, true );
+    this.texDirty = true;
+  },
+
+  setColor: function( color ) {
+    this.color = color;
+    this.tintFilter.uniforms.uColor.value = hexToRGB( color );
+  },
+
+  drawPaintDrop: function( x, y, radius ) {
+    var sprite = new PIXI.Sprite( this.tex_brushPoint );
+    sprite.shader = this.tintFilter;
+    sprite.anchor.x = 0.5;
+    sprite.anchor.y = 0.5;
+    sprite.position.x = x;
+    sprite.position.y = y;
+    sprite.scale = new PIXI.Point(
+      (radius * 2) / this.tex_brushPoint.width,
+      (radius * 2) / this.tex_brushPoint.height
+    );
+    this.brushPoints.addChild( sprite );
+  },
+
+  drawDebugCircle: function( x, y, radius, color ) {
+    this.gfx_debug.lineStyle( 5, color, 0.75 );
+    this.gfx_debug.drawCircle( x, y, radius );
   },
 
   afterRender: function() {
@@ -264,10 +337,14 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
     this.tex_in.clear();
   },
 
-  onMouseMove: function( ev ) {
-    var pt = ev.getLocalPosition( this.gfx );
-    this.last = new BrushPoint( pt.x, pt.y, this.timer.getElapsedSeconds() );
+  recordMousePosition: function( x, y ) {
+    this.last = new BrushPoint( x, y, this.timer.getElapsedSeconds() );
     this.pts.push( this.last );
+  },
+
+  onMouseMove: function( ev ) {
+    var pt = ev.getLocalPosition( this.mouseTrap );
+    this.recordMousePosition( pt.x, pt.y );
   },
 
   onMouseUp: function( ev ) {
