@@ -157,7 +157,8 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
   this.mouseTrap.interactive = true;
   // for some reason, touchstart is necessary to get touchmove
   this.mouseTrap.touchstart = this.onTouchStart.bind( this );
-  this.mouseTrap.mousemove = this.mouseTrap.touchmove = this.onMouseMove.bind( this );
+  this.mouseTrap.touchend = this.onTouchEnd.bind( this );
+  this.mouseTrap.mousemove = this.mouseTrap.touchmove = this.onBrushMove.bind( this );
   this.mouseTrap.mouseup = this.onMouseUp.bind( this );
 
   this.pts = [];
@@ -253,7 +254,7 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
     // this.drawDebugCircle( v_first[0], v_first[1], 10, 0xFF0000 );
     // this.drawDebugCircle( v_last[0], v_last[1], 10, 0x00FF00 );
     // this.drawDebugCircle( v_first[0] + avgDiff[0], v_first[1] + avgDiff[1], 10, 0x0000FF );
-
+    // this.drawDebugCircle( v_prev[0], v_prev[1], 10, 0xFF0000 );
 
     // Draw curve -------------------------------------------------------------
     var v_prevToLast = vec2.sub( vec2.create(), v_last, v_prev ),
@@ -355,7 +356,7 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
     this.pts.push( this.last );
   },
 
-  onMouseMove: function( ev ) {
+  onBrushMove: function( ev ) {
     var pt = ev.getLocalPosition( this.mouseTrap );
     this.recordMousePosition( pt.x, pt.y );
   },
@@ -364,6 +365,11 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
   },
 
   onTouchStart: function( ev ) {
+  },
+
+  onTouchEnd: function( ev ) {
+    this.previous = undefined;
+    this.last = undefined;
   }
 });
 
