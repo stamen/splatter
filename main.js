@@ -214,8 +214,10 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
     if ( this.pts.length === 0 ) return;
 
 
-    var v_last = this.pts[ this.pts.length - 1 ].v,
-        v_first = this.pts[ 0 ].v;
+    var pt_first = this.pts[ 0 ],
+        pt_last = this.pts[ this.pts.length - 1 ],
+        v_first = pt_first.v,
+        v_last = pt_last.v,
         v_prev = this.previous || this.pts[ Math.max( 0, this.pts.length - 2 ) ].v;
     this.previous = v_last;
 
@@ -248,20 +250,16 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
     this.gfx_debug.clear();
     this.gfx_paint.clear();
 
-    this.drawDebugCircle( v_first[0], v_first[1], 10, 0xFF0000 );
-    this.drawDebugCircle( v_last[0], v_last[1], 10, 0x00FF00 );
+    // this.drawDebugCircle( v_first[0], v_first[1], 10, 0xFF0000 );
+    // this.drawDebugCircle( v_last[0], v_last[1], 10, 0x00FF00 );
     // this.drawDebugCircle( v_first[0] + avgDiff[0], v_first[1] + avgDiff[1], 10, 0x0000FF );
 
 
     // Draw curve -------------------------------------------------------------
-    // var ctrl = vec2.add( vec2.create(), v_prev, avgDiff );
-    // this.gfx_paint.moveTo( v_prev[0], v_prev[1] );
-    // this.gfx_paint.lineStyle( 2, this.color, 1.0 );
-    // this.gfx_paint.quadraticCurveTo( ctrl[0], ctrl[1], v_last[0], v_last[1] );
     var v_prevToLast = vec2.sub( vec2.create(), v_last, v_prev ),
       v_mid = vec2.add( vec2.create(), v_prev, vec2.scale( vec2.create(), v_prevToLast, 0.5 ) ),
       ctrl = vec2.add( vec2.create(), v_mid, vec2.scale( vec2.create(), avgDiff, Math.max( 0.0, 1.0 - Math.log( velocity ) ) ) ),
-      thickness = Math.max( 2.0, (velocity - 10.0) * 0.25 );//Math.max( 1.0, 10.0 - Math.log( velocity ) / Math.log( 2.0 ) );
+      thickness = Math.max( 2.0, (velocity - 10.0) * 0.25 + ((Math.random() - 0.5) * 4.0) );
 
     for ( var t = 0.0; t <= 1.0; t += (1.0 / vec2.length( v_prevToLast )) ) {
       var xy = quadraticCurve( v_prev, v_last, ctrl, t );
@@ -270,9 +268,12 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
 
 
 
-    // Draw drops -------------------------------------------------------------
-    // var nDrops = Math.min( Math.floor( Math.random() * velocity * 0.5 + 75.0 ), 1000 );
-    var nDrops = Math.min( 1000, Math.floor( Math.random() * Math.max( 0.0, velocity - 20.0 ) * 5.0 ) );
+    // Draw spray drops --------------------------------------------------------
+
+    // lots of drops when the velocity is high...
+    var nDrops = Math.floor( Math.random() * Math.max( 0.0, velocity - 20.0 ) * 5.0 );
+    // too many drops can easily stall the app
+    nDrops = Math.clamp( nDrops, 0, 1000 );
 
     for ( var i = 0; i < nDrops; ++i ) {
       var scatterDistance = Math.mix( Math.random(),
@@ -281,10 +282,8 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
       var scatterSpread = (Math.random() - 0.5) * TAU / 3.0;
       var radius = Math.pow( Math.random(), 4 ) * // random factor, tends to be closer to 1
         Math.min(1.0 / scatterDistance, 1.0) * // the further the scatter, the smaller
-        velocity * 0.50 + // when velocity is higher, make it bigger
-        Math.max( (1.0 - Math.log( velocity ) / Math.log( 20.0 )) * 3.0, 0.0 ); // and when velocity is very small, make it bigger for stationary brush
+        velocity * 0.50; // when velocity is higher, make it bigger
 
-      // var xy = quadraticCurve( vec2.create(), vec2.sub( vec2.create(), v_last, v_first ), avgDiff, Math.min( 1.0, scatterDistance ) );
       var xy = vec2.scale( vec2.create(), avgDiff, scatterDistance );
       var rotation = mat2d.rotate( mat2d.create(), mat2d.create(), scatterSpread );
       vec2.transformMat2d( xy, xy, rotation );
@@ -294,6 +293,20 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
       this.drawPaintDrop( xy[0], xy[1], radius );
     }
 
+
+    // Draw drippy drops -------------------------------------------------------
+    nDrops = 2.0 - velocity / 5.0;
+    nDrops = Math.clamp( nDrops, 0, 1000 );
+
+    var timeDelta = pt_last.time - pt_first.time;
+    for ( var i = 0; i < nDrops; ++i ) {
+      var radius = Math.random() * timeDelta * 40.0;
+      var size = Math.random() * timeDelta * 100.0;
+      var xy = vec2.add( vec2.create(), v_last, vec2.random( vec2.create(), radius ) );
+      this.drawPaintDrop( xy[0], xy[1], size );
+    }
+
+    // Finalize ----------------------------------------------------------------
     this.tex_out.render( this.offscreenContainer, undefined, true );
     this.texDirty = true;
   },
