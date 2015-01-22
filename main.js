@@ -391,6 +391,17 @@ var init = function( $container ) {
 
   requestAnimFrame( animate );
 
+  if ( getUrlParameter( "kiosk" ) ) {
+    var regex = /^https?:/;
+    $("a").each( function() {
+      $a = $( this );
+      var href = $a.attr("href");
+      if ( regex.test( href ) ) {
+        $a.contents().unwrap();
+      }
+    });
+  }
+
   return {
     stage: stage,
     renderer: renderer,
