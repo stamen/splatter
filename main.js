@@ -155,11 +155,10 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
 
   this.mouseTrap.hitArea = new PIXI.Rectangle( 0, 0, w, h );
   this.mouseTrap.interactive = true;
-  // for some reason, touchstart is necessary to get touchmove
-  this.mouseTrap.touchstart = this.onTouchStart.bind( this );
-  this.mouseTrap.touchend = this.onTouchEnd.bind( this );
+  this.isDragging = false;
+  this.mouseTrap.mousedown = this.mouseTrap.touchstart = this.onBrushStart.bind( this );
+  this.mouseTrap.mouseup = this.mouseTrap.mouseupoutside = this.mouseTrap.touchend = this.onBrushEnd.bind( this );
   this.mouseTrap.mousemove = this.mouseTrap.touchmove = this.onBrushMove.bind( this );
-  this.mouseTrap.mouseup = this.onMouseUp.bind( this );
 
   this.pts = [];
 
@@ -192,7 +191,6 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
   filter.uniforms.uThreshold.value = 0.75;
 
   this.texDirty = false;
-  this.wasStationary = false;
   this.previous = undefined;
   this.tintFilter = new ColorChangeFilter();
   this.setColor( ColorPalette.rand() );
@@ -209,7 +207,6 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
     // add points if the brush is still
     if ( this.last && (time - this.last.time) > 0.075 ) {
       this.pts.push( new BrushPoint( this.last.v[0], this.last.v[1], time ) );
-      this.wasStationary = true;
     }
 
     if ( this.pts.length === 0 ) return;
@@ -237,13 +234,6 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
     var scale = 1.0 / this.pts.length * this.sensitivity;
     vec2.scale( avgDiff, avgDiff, scale );
     var velocity = vec2.length( avgDiff );
-
-
-    // Update color -----------------------------------------------------------
-    if ( velocity > 10.0 && this.wasStationary ) {
-      this.setColor( ColorPalette.rand() );
-      this.wasStationary = false;
-    }
 
 
     // Prep for drawing -------------------------------------------------------
@@ -356,20 +346,25 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
     this.pts.push( this.last );
   },
 
+  onBrushStart: function( ev ) {
+    this.isDragging = true;
+
+    var c = this.color;
+    while ( c === this.color ) c = ColorPalette.rand();
+    this.setColor( c );
+  },
+
+  onBrushEnd: function( ev ) {
+    this.isDragging = false;
+    this.previous   = undefined;
+    this.last       = undefined;
+  },
+
   onBrushMove: function( ev ) {
+    if ( !this.isDragging ) return;
+
     var pt = ev.getLocalPosition( this.mouseTrap );
     this.recordMousePosition( pt.x, pt.y );
-  },
-
-  onMouseUp: function( ev ) {
-  },
-
-  onTouchStart: function( ev ) {
-  },
-
-  onTouchEnd: function( ev ) {
-    this.previous = undefined;
-    this.last = undefined;
   }
 });
 
