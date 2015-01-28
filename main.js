@@ -79,6 +79,10 @@ var Timer = function( startTime ) {
 _.extend( Timer.prototype, {
   getElapsedSeconds: function() {
     return (new Date().getTime() - this.startTime) / 1000.0;
+  },
+
+  dup: function() {
+    return new Timer( this.startTime );
   }
 });
 
@@ -158,6 +162,7 @@ var ColorPalette = [
 ColorPalette.rand = function() { return this[ Math.floor( Math.random() * this.length ) ]; }
 views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
   this.timer = timer;
+  this.resetIdleTimer();
   this.sensitivity = sensitivity;
 
   this.mouseTrap = new PIXI.DisplayObject();
@@ -359,7 +364,12 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
     this.pts.push( this.last );
   },
 
+  resetIdleTimer: function() {
+    this.idleTimer = new Timer( new Date().getTime() );
+  },
+
   onBrushStart: function( ev ) {
+    this.resetIdleTimer();
     this.isDragging = true;
 
     var c = this.color;
@@ -368,16 +378,22 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
   },
 
   onBrushEnd: function( ev ) {
+    this.resetIdleTimer();
     this.isDragging = false;
     this.previous   = undefined;
     this.last       = undefined;
   },
 
   onBrushMove: function( ev ) {
+    this.resetIdleTimer();
     if ( !this.isDragging ) return;
 
     var pt = ev.getLocalPosition( this.mouseTrap );
     this.recordMousePosition( pt.x, pt.y );
+  },
+
+  getIdleSeconds: function() {
+    return this.idleTimer.getElapsedSeconds();
   }
 });
 
@@ -414,7 +430,8 @@ var init = function( $container ) {
     stage: stage,
     renderer: renderer,
     view: view,
-    clear: view.clear.bind( view )
+    clear: view.clear.bind( view ),
+    getIdleSeconds: view.getIdleSeconds.bind( view )
   };
 
 
@@ -429,6 +446,18 @@ var init = function( $container ) {
 
 $(function(){
   window.app = init( $("#render-container") );
+
+  var refreshAfterSeconds = getUrlParameter( "refreshAfterSeconds" );
+  if ( refreshAfterSeconds ) {
+    console.log( "Refreshing after " + refreshAfterSeconds + " seconds" );
+    setInterval( function() {
+      if ( app.getIdleSeconds() > refreshAfterSeconds ) {
+        window.location.reload();
+      }
+    }, 1000 );
+  } else {
+    console.log( "No refresh time set, not refreshing. Use URL param refreshAfterSeconds to refresh after a period of inactivity." );
+  }
 
   var uid = getUrlParameter( "uid" );
   ga('create', 'UA-40440647-2', { 'userId': uid });
