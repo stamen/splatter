@@ -163,7 +163,6 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
   this.pts = [];
 
   this.gfx_debug = new PIXI.Graphics();
-  this.gfx_paint = new PIXI.Graphics();
   this.brushPoints = new PIXI.DisplayObjectContainer();
   this.tex_brushPoint = PIXI.Texture.fromImage( "radial-alpha-gradient.png" );
   this.offscreenContainer = new PIXI.DisplayObjectContainer();
@@ -182,7 +181,6 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
   stage.addChild( this.gfx_debug );
   this.offscreenContainer.addChild( this.texSprite_in );
   this.offscreenContainer.addChild( this.brushPoints );
-  this.offscreenContainer.addChild( this.gfx_paint );
 
   // Filters broken? https://github.com/GoodBoyDigital/pixi.js/issues/843
   // this.texSprite_out.filters = [ new MetaballFilter() ];
@@ -237,9 +235,7 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
 
 
     // Prep for drawing -------------------------------------------------------
-    this.brushPoints.removeChildren();
-    this.gfx_debug.clear();
-    this.gfx_paint.clear();
+    this.clearTemp();
 
     // this.drawDebugCircle( v_first[0], v_first[1], 10, 0xFF0000 );
     // this.drawDebugCircle( v_last[0], v_last[1], 10, 0x00FF00 );
@@ -338,7 +334,14 @@ views.Paint = extend( views.Base, function( stage, w, h, timer, sensitivity ) {
   },
 
   clear: function () {
+    this.clearTemp();
     this.tex_in.clear();
+    this.tex_out.clear();
+  },
+
+  clearTemp: function () {
+    this.brushPoints.removeChildren();
+    this.gfx_debug.clear();
   },
 
   recordMousePosition: function( x, y ) {
